@@ -159,7 +159,8 @@ an idempotency key, so the action never runs twice.
 
 ## Changes
 
-* **1.1.0**: the first release as `n8n-nodes-vrymdor` (before: `n8n-nodes-vrymdor` 1.0.5, now deprecated). Named
+* **1.1.1**: the author contact email is ernesth@vrymnox.com. Nothing else changed.
+* **1.1.0**: the first release as `n8n-nodes-vrymdor` (before: `n8n-nodes-vrymnox` 1.0.5, now deprecated). Named
   Vrymdor AI Node in n8n (credential Vrymdor AI Node API); the Node Host URL has no internal default and its help
   explains the hosted node for n8n Cloud; operations grouped under the resources Data and Action; light and dark
   icons; waits use n8n's own helpers.
