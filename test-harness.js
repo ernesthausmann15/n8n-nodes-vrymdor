@@ -82,10 +82,10 @@ function makeContext({ url, agentId, agentSecret, params }) {
   return { ctx, state }
 }
 
-async function runOnce({ url, agentId, agentSecret, params }) {
+async function runOnce({ url, agentId, agentSecret, params }, NodeClass = Vrymdor) {
   const { ctx, state } = makeContext({ url, agentId, agentSecret, params })
   try {
-    const out = await new Vrymdor().execute.call(ctx)
+    const out = await new NodeClass().execute.call(ctx)
     return { ...out[0][0].json, _preAuthRuns: state.preAuthRuns, _warnings: state.warnings }
   } catch (e) {
     return { thrown: e.message, _preAuthRuns: state.preAuthRuns, _warnings: state.warnings }
@@ -223,6 +223,55 @@ async function safeModeTests() {
       assert.equal(out.vrymdor.degraded, 'safe_mode')
       assert.equal(out.vrymdor.reason, 'timeout')
       assert.ok(!JSON.stringify(out.output).includes('jane@example.com'))
+    } finally { g.close() }
+  })
+
+  // Regression (2026-11-16, the n8n demo video): 1.1.1 imported sleepWithAbort by name, so on an n8n whose
+  // n8n-workflow predates that helper every run failed with "(0, n8n_workflow_1.sleepWithAbort) is not a function".
+  // Load the built node against an n8n-workflow without the helper: it must still run, and the request timeout
+  // must still bound a hanging gateway.
+  function nodeOnOldN8n() {
+    const Module = require('node:module')
+    const real = require('n8n-workflow')
+    const old = new Proxy(real, { get: (t, k) => (k === 'sleepWithAbort' ? undefined : t[k]), has: (t, k) => k !== 'sleepWithAbort' && k in t })
+    const path = require.resolve('./dist/nodes/Vrymdor/Vrymdor.node.js')
+    const cached = require.cache[path]
+    delete require.cache[path]
+    const load = Module._load
+    Module._load = function (request, ...rest) { return request === 'n8n-workflow' ? old : load.call(this, request, ...rest) }
+    try {
+      return require(path).Vrymdor
+    } finally {
+      Module._load = load
+      require.cache[path] = cached
+    }
+  }
+  const runOld = (url, params) => runOnce({ url, agentId: 'agt-test', agentSecret: 'vrym_agent_test', params }, nodeOnOldN8n())
+
+  test('regression: runs on an n8n without sleepWithAbort (no "is not a function")', async () => {
+    const g = await stub('ok')
+    try {
+      const out = await runOld(g.url, { operation: 'sanitize', input: sample })
+      assert.equal(out.thrown, undefined, out.thrown)
+      assert.equal(out.ok, true)
+      assert.equal(out.decision, 'allow')
+    } finally { g.close() }
+    const check = await stub('ok')
+    try {
+      const out = await runOld(check.url, { operation: 'check', checkType: 'sanitize', input: sample })
+      assert.equal(out.thrown, undefined, out.thrown)
+      assert.equal(out.ok, true)
+    } finally { check.close() }
+  })
+
+  test('regression: on an n8n without sleepWithAbort a hanging gateway still falls back within the budget', async () => {
+    const g = await stub('hang')
+    try {
+      const started = Date.now()
+      const out = await runOld(g.url, { operation: 'sanitize', input: sample, options: { timeoutMs: 300 } })
+      assert.ok(Date.now() - started < 2500, 'took too long')
+      assert.equal(out.vrymdor.degraded, 'safe_mode')
+      assert.equal(out.vrymdor.reason, 'timeout')
     } finally { g.close() }
   })
 

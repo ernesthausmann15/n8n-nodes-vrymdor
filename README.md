@@ -159,6 +159,8 @@ an idempotency key, so the action never runs twice.
 
 ## Changes
 
+* **1.1.2**: runs on n8n versions whose n8n-workflow has no `sleepWithAbort` helper. 1.1.1 failed there on every
+  run with "sleepWithAbort is not a function"; the request timeout now bounds the wait on those versions.
 * **1.1.1**: the author contact email is ernesth@vrymnox.com. Nothing else changed.
 * **1.1.0**: the first release as `n8n-nodes-vrymdor` (before: `n8n-nodes-vrymnox` 1.0.5, now deprecated). Named
   Vrymdor AI Node in n8n (credential Vrymdor AI Node API); the Node Host URL has no internal default and its help

@@ -2,7 +2,6 @@ import {
   NodeApiError,
   NodeConnectionTypes,
   NodeOperationError,
-  sleepWithAbort,
   type IDataObject,
   type IHttpRequestMethods,
   type JsonObject,
@@ -11,6 +10,7 @@ import {
   type INodeType,
   type INodeTypeDescription,
 } from 'n8n-workflow'
+import * as n8nWorkflow from 'n8n-workflow'
 
 import { maskValue } from './safeMode'
 
@@ -341,9 +341,19 @@ function safeParse(text: string): unknown {
   }
 }
 
+/** n8n's sleepWithAbort, or undefined on an n8n older than the helper (read from the namespace, so a missing export
+ * is undefined instead of a "sleepWithAbort is not a function" crash on every run). */
+export function abortableSleep(): ((ms: number, signal?: AbortSignal) => Promise<void>) | undefined {
+  const sleep = (n8nWorkflow as { sleepWithAbort?: unknown }).sleepWithAbort
+  return typeof sleep === 'function' ? (sleep as (ms: number, signal?: AbortSignal) => Promise<void>) : undefined
+}
+
 /** Rejects with a VRYMDOR_BUDGET error when the promise takes longer than `ms` (the token exchange included). The
- * wait is n8n's own sleepWithAbort, stopped as soon as the answer arrives. */
+ * wait is n8n's own sleepWithAbort, stopped as soon as the answer arrives. On an n8n without it, the request's own
+ * timeout (the same `ms`) bounds the call instead. */
 async function withBudget<T>(promise: Promise<T>, ms: number): Promise<T> {
+  const sleepWithAbort = abortableSleep()
+  if (!sleepWithAbort) return promise
   const stop = new AbortController()
   const late = sleepWithAbort(ms, stop.signal).then(
     (): never => {
